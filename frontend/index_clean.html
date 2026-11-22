@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TRIPLANNER TU AGENTE DE VIAJE</title>
+  <link rel="stylesheet" href="styles.v6.css" />
+</head>
+<body>
+
+<!-- =========================================================
+     AUTH SCREEN (Cognito Login / Register)
+     Se muestra antes de la app si no hay sesiÃ³n activa
+========================================================= -->
+<div id="authScreen" style="display:none;">
+  <div class="auth-container">
+    <div class="auth-logo">
+      <span>âœˆï¸</span>
+      <div>
+        <div class="auth-logo-title">TRIPLANNER <span>TU AGENTE</span></div>
+        <div class="auth-logo-sub">TU AGENTE DE VIAJE</div>
+      </div>
+    </div>
+
+    <div class="auth-card">
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" data-label="Iniciar sesiÃ³n"
+                onclick="Auth.showAuthTab('login')">Iniciar sesiÃ³n</button>
+        <button class="auth-tab" id="tab-register" data-label="Crear cuenta"
+                onclick="Auth.showAuthTab('register')">Crear cuenta</button>
+      </div>
+
+      <!-- Error / Success banners -->
+      <div id="authError" class="auth-error" style="display:none;"></div>
+      <div id="authSuccess" class="auth-success" style="display:none;"></div>
+
+      <!-- LOGIN -->
+      <div class="auth-panel active" id="panel-login">
+        <form onsubmit="Auth.handleLogin(event)">
+          <div class="auth-field">
+            <label>Email</label>
+            <input type="email" id="loginEmail" placeholder="tu@email.com" required autocomplete="email" />
+          </div>
+          <div class="auth-field">
+            <label>ContraseÃ±a</label>
+            <input type="password" id="loginPassword" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" required autocomplete="current-password" />
+          </div>
+          <button type="submit" class="auth-submit-btn" data-label="Iniciar sesiÃ³n">
+            Iniciar sesiÃ³n
+          </button>
+        </form>
+        <div class="auth-links">
+          <a onclick="Auth.showAuthTab('forgot')">Â¿Olvidaste tu contraseÃ±a?</a>
+        </div>
+      </div>
+
+      <!-- REGISTER -->
+      <div class="auth-panel" id="panel-register">
+        <form onsubmit="Auth.handleRegister(event)">
+          <div class="auth-field">
+            <label>Nombre</label>
+            <input type="text" id="registerName" placeholder="Tu nombre" required autocomplete="name" />
+          </div>
+          <div class="auth-field">
+            <label>Email</label>
+            <input type="email" id="registerEmail" placeholder="tu@email.com" required autocomplete="email" />
+          </div>
+          <div class="auth-field">
+            <label>ContraseÃ±a</label>
+            <input type="password" id="registerPassword" placeholder="MÃ­nimo 8 caracteres" required autocomplete="new-password" />
+          </div>
+          <div class="auth-field">
+            <label>Confirmar contraseÃ±a</label>
+            <input type="password" id="registerPassword2" placeholder="Repite la contraseÃ±a" required />
+          </div>
+          <button type="submit" class="auth-submit-btn" data-label="Crear cuenta">
+            Crear cuenta
+          </button>
+        </form>
+      </div>
+
+      <!-- CONFIRM EMAIL -->
+      <div class="auth-panel" id="panel-confirm">
+        <p id="confirmInfo" style="font-size:14px;color:#64748B;margin-bottom:14px;">
+          Ingresa el cÃ³digo que enviamos a tu email.
+        </p>
+        <form onsubmit="Auth.handleConfirm(event)">
+          <div class="auth-field">
+            <label>Email</label>
+            <input type="email" id="confirmEmail" placeholder="tu@email.com" required />
+          </div>
+          <div class="auth-field">
+            <label>CÃ³digo de verificaciÃ³n</label>
+            <input type="text" id="confirmCode" placeholder="123456" required maxlength="6"
+                   style="letter-spacing:4px;font-size:20px;text-align:center;" />
+          </div>
+          <button type="submit" class="auth-submit-btn" data-label="Verificar cuenta">
+            Verificar cuenta
+          </button>
+        </form>
+        <div class="auth-links">
+          <a onclick="Auth.showAuthTab('login')">â† Volver al login</a>
+        </div>
+      </div>
+
+      <!-- FORGOT PASSWORD -->
+      <div class="auth-panel" id="panel-forgot">
+        <form onsubmit="Auth.handleForgotPassword(event)">
+          <div class="auth-field">
+            <label>Email de tu cuenta</label>
+            <input type="email" id="forgotEmail" placeholder="tu@email.com" required />
+          </div>
+          <button type="submit" class="auth-submit-btn" data-label="Enviar cÃ³digo">
+            Enviar cÃ³digo de recuperaciÃ³n
+          </button>
+        </form>
+        <div class="auth-links">
+          <a onclick="Auth.showAuthTab('login')">â† Volver al login</a>
+        </div>
+      </div>
+
+      <!-- RESET PASSWORD -->
+      <div class="auth-panel" id="panel-reset">
+        <form onsubmit="Auth.handleResetPassword(event)">
+          <div class="auth-field">
+            <label>Email</label>
+            <input type="email" id="resetEmail" placeholder="tu@email.com" required />
+          </div>
+          <div class="auth-field">
+            <label>CÃ³digo recibido por email</label>
+            <input type="text" id="resetCode" placeholder="123456" required maxlength="8" />
+          </div>
+          <div class="auth-field">
+            <label>Nueva contraseÃ±a</label>
+            <input type="password" id="resetPassword" placeholder="MÃ­nimo 8 caracteres" required />
+          </div>
+          <button type="submit" class="auth-submit-btn" data-label="Cambiar contraseÃ±a">
+            Cambiar contraseÃ±a
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <p class="auth-footer">
+      ðŸ” AutenticaciÃ³n segura Â· Amazon Cognito Â· TRIPLANNER
+    </p>
+  </div>
+</div>
+
+<!-- =========================================================
+     APP SHELL (visible solo cuando el usuario estÃ¡ logueado)
+========================================================= -->
+<div id="appShell" style="display:none; width:100%; min-height:100vh; display:none;">
+
+<!-- =========================================================
+     SIDEBAR NAVIGATION
+========================================================= -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-icon">âœˆï¸</span>
+    <span class="logo-text">TRIPLANNER <span class="logo-ai">TU AGENTE</span></span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="nav-item active" data-module="dashboard" onclick="showModule('dashboard')">
+      <span class="nav-icon">ðŸ </span><span class="nav-label">Dashboard</span>
+    </a>
+    <a class="nav-item" data-module="chat" onclick="showModule('chat')">
+      <span class="nav-icon">ðŸ¤–</span><span class="nav-label">Asistente</span>
+    </a>
+    <a class="nav-item" data-module="flights" onclick="showModule('flights')">
+      <span class="nav-icon">âœˆï¸</span><span class="nav-label">Vuelos</span>
+    </a>
+    <a class="nav-item" data-module="weather" onclick="showModule('weather')">
+      <span class="nav-icon">ðŸŒ¤ï¸</span><span class="nav-label">Clima</span>
+    </a>
+    <a class="nav-item" data-module="trips" onclick="showModule('trips')">
+      <span class="nav-icon">ðŸ—ºï¸</span><span class="nav-label">Mis Viajes</span>
+    </a>
+    <a class="nav-item" data-module="reservations" onclick="showModule('reservations')">
+      <span class="nav-icon">ðŸ“‹</span><span class="nav-label">Reservas</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-user">
+    <div class="user-avatar">ðŸ‘¤</div>
+    <div class="user-info">
+      <div class="user-name" id="displayUserName">Viajero</div>
+      <div class="user-id" id="displayUserId">user-001</div>
+    </div>
+    <button class="logout-btn" onclick="handleLogout()" title="Cerrar sesiÃ³n">ðŸšª</button>
+  </div>
+</aside>
+
+<!-- =========================================================
+     MAIN CONTENT
+========================================================= -->
+<main class="main-content">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <button class="menu-toggle" onclick="toggleSidebar()">â˜°</button>
+    <div class="topbar-title" id="topbarTitle">Dashboard</div>
+    <div class="topbar-actions">
+      <div class="user-setup">
+        <input type="text" id="userIdInput" placeholder="Tu ID de usuario" value="user-001" />
+        <button onclick="setUserId()">Guardar</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================
+       MODULE: DASHBOARD
+  ========================================================= -->
+  <section class="module active" id="module-dashboard">
+    <div class="module-header">
+      <h1>Â¡Bienvenido, <span id="welcomeName">Viajero</span>! ðŸ‘‹</h1>
+      <p class="subtitle">Tu compaÃ±ero inteligente para planificar el viaje perfecto</p>
+    </div>
+
+    <div class="dashboard-grid">
+      <!-- Quick actions -->
+      <div class="card quick-actions">
+        <h3>Acciones RÃ¡pidas</h3>
+        <div class="actions-grid">
+          <button class="action-btn" onclick="showModule('chat')">
+            <span>ðŸ¤–</span><span>Consultar Asistente</span>
+          </button>
+          <button class="action-btn" onclick="showModule('flights')">
+            <span>âœˆï¸</span><span>Buscar Vuelos</span>
+          </button>
+          <button class="action-btn" onclick="showModule('weather')">
+            <span>ðŸŒ¤ï¸</span><span>Ver Clima</span>
+          </button>
+          <button class="action-btn" onclick="openNewTripModal()">
+            <span>âž•</span><span>Nuevo Viaje</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Demo scenario -->
+      <div class="card scenario-card">
+        <h3>ðŸŽ¯ Escenario de DemostraciÃ³n</h3>
+        <p>Prueba el flujo completo del trabajo final:</p>
+        <blockquote>
+          "Quiero organizar unas vacaciones de 4 dÃ­as en Cartagena. Salgo desde BogotÃ¡,
+          viajo con 2 personas mÃ¡s y tengo un presupuesto de 5 millones de pesos."
+        </blockquote>
+        <button class="btn-primary" onclick="runDemoScenario()">
+          â–¶ Iniciar DemostraciÃ³n
+        </button>
+      </div>
+
+      <!-- Stats -->
+      <div class="card stats-card">
+        <h3>ðŸ“Š Resumen</h3>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-number" id="statTrips">0</div>
+            <div class="stat-label">Viajes</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number" id="statReservations">0</div>
+            <div class="stat-label">Reservas</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number" id="statItineraries">0</div>
+            <div class="stat-label">Itinerarios</div>
+          </div>
+        </div>
+        <button class="btn-secondary" onclick="loadDashboardStats()">ðŸ”„ Actualizar</button>
+      </div>
+
+      <!-- Upcoming trips -->
+      <div class="card upcoming-trips">
+        <h3>ðŸ—ºï¸ PrÃ³ximos Viajes</h3>
+        <div id="upcomingTripsList">
+          <div class="empty-state">
+            <span>ðŸŒ</span>
+            <p>No tienes viajes planificados aÃºn.<br/>
+            <a onclick="showModule('chat')">PÃ­dele al asistente que te ayude</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       MODULE: CHAT
+  ========================================================= -->
+  <section class="module" id="module-chat">
+    <div class="module-header">
+      <h1>ðŸ¤– Asistente de Viajes</h1>
+      <p class="subtitle">Chat con streaming Â· Powered by Amazon Bedrock AgentCore</p>
+    </div>
+
+    <div class="chat-container">
+      <div class="chat-messages" id="chatMessages">
+        <div class="message assistant">
+          <div class="message-avatar">ðŸ¤–</div>
+          <div class="message-bubble">
+            Â¡Hola! Soy TRIPLANNER. Puedo ayudarte a:
+            <ul>
+              <li>ðŸ” Buscar vuelos entre aeropuertos</li>
+              <li>ðŸŒ¤ï¸ Consultar el clima en tu destino</li>
+              <li>ðŸ—ºï¸ Crear y gestionar tus viajes</li>
+              <li>ðŸ“… Generar itinerarios personalizados</li>
+              <li>ðŸ“‹ Registrar y consultar tus reservas</li>
+            </ul>
+            Â¿En quÃ© viaje te puedo ayudar hoy?
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-structured-results" id="structuredResults" style="display:none;">
+        <div id="structuredContent"></div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="chat-suggestions">
+          <button onclick="sendSuggestion('Busca vuelos de BogotÃ¡ a Cartagena para el 2027-01-15')">âœˆï¸ Vuelos BOGâ†’CTG</button>
+          <button onclick="sendSuggestion('Â¿QuÃ© clima hace en Cartagena en enero?')">ðŸŒ¤ï¸ Clima Cartagena</button>
+          <button onclick="sendSuggestion('Crea un viaje a Cartagena del 15 al 19 de enero de 2027, saliendo desde BogotÃ¡, 3 viajeros, presupuesto 5000000 COP')">âž• Crear viaje</button>
+          <button onclick="sendSuggestion('Genera un itinerario de 4 dÃ­as para mi viaje a Cartagena')">ðŸ“… Generar itinerario</button>
+        </div>
+        <div class="chat-input-row">
+          <textarea
+            id="chatInput"
+            placeholder="Escribe tu mensaje... (Enter para enviar, Shift+Enter para nueva lÃ­nea)"
+            rows="2"
+            onkeydown="handleChatKeydown(event)"
+          ></textarea>
+          <button class="btn-send" id="btnSend" onclick="sendChatMessage()">
+            <span id="sendIcon">âž¤</span>
+          </button>
+        </div>
+        <div class="chat-status" id="chatStatus"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       MODULE: FLIGHTS
+  ========================================================= -->
+  <section class="module" id="module-flights">
+    <div class="module-header">
+      <h1>âœˆï¸ BÃºsqueda de Vuelos</h1>
+      <p class="subtitle">Compara precios y horarios vÃ­a FlightsAgent + MCP</p>
+    </div>
+
+    <div class="search-form card">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Origen (cÃ³digo IATA)</label>
+          <input type="text" id="flightOrigin" placeholder="BOG" value="BOG" maxlength="4" style="text-transform:uppercase" />
+        </div>
+        <div class="swap-btn" onclick="swapAirports()">â‡†</div>
+        <div class="form-group">
+          <label>Destino (cÃ³digo IATA)</label>
+          <input type="text" id="flightDestination" placeholder="CTG" value="CTG" maxlength="4" style="text-transform:uppercase" />
+        </div>
+        <div class="form-group">
+          <label>Fecha de salida</label>
+          <input type="date" id="flightDate" />
+        </div>
+        <button class="btn-primary" onclick="searchFlights()">ðŸ” Buscar Vuelos</button>
+      </div>
+    </div>
+
+    <div id="flightsLoading" style="display:none;" class="loading-state">
+      <div class="spinner"></div><p>Consultando FlightsAgent vÃ­a MCP...</p>
+    </div>
+
+    <div id="flightsResults" class="flights-grid"></div>
+  </section>
+
+  <!-- =========================================================
+       MODULE: WEATHER
+  ========================================================= -->
+  <section class="module" id="module-weather">
+    <div class="module-header">
+      <h1>ðŸŒ¤ï¸ InformaciÃ³n MeteorolÃ³gica</h1>
+      <p class="subtitle">PronÃ³stico por destino y fechas vÃ­a WeatherAgent</p>
+    </div>
+
+    <div class="search-form card">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Ciudad</label>
+          <input type="text" id="weatherCity" placeholder="Cartagena" value="Cartagena" />
+        </div>
+        <div class="form-group">
+          <label>Fecha inicio</label>
+          <input type="date" id="weatherStartDate" />
+        </div>
+        <div class="form-group">
+          <label>DÃ­as de pronÃ³stico</label>
+          <select id="weatherDays">
+            <option value="1">1 dÃ­a</option>
+            <option value="3" selected>3 dÃ­as</option>
+            <option value="5">5 dÃ­as</option>
+            <option value="7">7 dÃ­as</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="searchWeather()">ðŸ” Consultar Clima</button>
+      </div>
+    </div>
+
+    <div id="weatherLoading" style="display:none;" class="loading-state">
+      <div class="spinner"></div><p>Consultando WeatherAgent...</p>
+    </div>
+
+    <div id="weatherResults" class="weather-grid"></div>
+  </section>
+
+  <!-- =========================================================
+       MODULE: TRIPS
+  ========================================================= -->
+  <section class="module" id="module-trips">
+    <div class="module-header">
+      <h1>ðŸ—ºï¸ Mis Viajes e Itinerarios</h1>
+      <p class="subtitle">Viajes guardados, itinerarios y preferencias</p>
+    </div>
+
+    <div class="module-actions">
+      <button class="btn-primary" onclick="openNewTripModal()">âž• Nuevo Viaje</button>
+      <button class="btn-secondary" onclick="loadTrips()">ðŸ”„ Actualizar</button>
+    </div>
+
+    <div id="tripsLoading" style="display:none;" class="loading-state">
+      <div class="spinner"></div><p>Cargando viajes...</p>
+    </div>
+
+    <div id="tripsList" class="trips-grid"></div>
+
+    <!-- Itinerary view -->
+    <div id="itineraryView" style="display:none;" class="itinerary-container card">
+      <div class="itinerary-header">
+        <h2 id="itineraryTitle">Itinerario</h2>
+        <button onclick="closeItinerary()">âœ• Cerrar</button>
+      </div>
+      <div id="itineraryContent"></div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       MODULE: RESERVATIONS
+  ========================================================= -->
+  <section class="module" id="module-reservations">
+    <div class="module-header">
+      <h1>ðŸ“‹ GestiÃ³n de Reservas</h1>
+      <p class="subtitle">Vuelos, hoteles y actividades Â· Estado de reservas</p>
+    </div>
+
+    <div class="module-actions">
+      <button class="btn-primary" onclick="openNewReservationModal()">âž• Nueva Reserva</button>
+      <button class="btn-secondary" onclick="loadReservations()">ðŸ”„ Actualizar</button>
+      <div class="filter-group">
+        <select id="reservationFilter" onchange="filterReservations()">
+          <option value="">Todas</option>
+          <option value="FLIGHT">âœˆï¸ Vuelos</option>
+          <option value="HOTEL">ðŸ¨ Hoteles</option>
+          <option value="ACTIVITY">ðŸŽ¯ Actividades</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="reservationsLoading" style="display:none;" class="loading-state">
+      <div class="spinner"></div><p>Cargando reservas...</p>
+    </div>
+
+    <div id="reservationsList" class="reservations-list"></div>
+  </section>
+
+</main>
+
+<!-- =========================================================
+     MODAL: NEW TRIP
+========================================================= -->
+<div class="modal-overlay" id="newTripModal" style="display:none;" onclick="closeModal('newTripModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>âž• Nuevo Viaje</h2>
+      <button onclick="closeModal('newTripModal')">âœ•</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Destino *</label>
+        <input type="text" id="newTripDestination" placeholder="Cartagena" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Origen</label>
+          <input type="text" id="newTripOrigin" placeholder="BogotÃ¡" />
+        </div>
+        <div class="form-group">
+          <label>Viajeros</label>
+          <input type="number" id="newTripTravelers" value="2" min="1" max="20" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fecha inicio *</label>
+          <input type="date" id="newTripStartDate" />
+        </div>
+        <div class="form-group">
+          <label>Fecha fin *</label>
+          <input type="date" id="newTripEndDate" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Presupuesto</label>
+          <input type="number" id="newTripBudget" placeholder="5000000" />
+        </div>
+        <div class="form-group">
+          <label>Moneda</label>
+          <select id="newTripCurrency">
+            <option value="COP" selected>COP</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notas</label>
+        <textarea id="newTripNotes" placeholder="Preferencias, actividades deseadas..." rows="2"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('newTripModal')">Cancelar</button>
+      <button class="btn-primary" onclick="createTrip()">Crear Viaje</button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     MODAL: NEW RESERVATION
+========================================================= -->
+<div class="modal-overlay" id="newReservationModal" style="display:none;" onclick="closeModal('newReservationModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>ðŸ“‹ Nueva Reserva</h2>
+      <button onclick="closeModal('newReservationModal')">âœ•</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Viaje *</label>
+        <select id="newResTripId">
+          <option value="">Seleccionar viaje...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo *</label>
+        <select id="newResType">
+          <option value="FLIGHT">âœˆï¸ Vuelo</option>
+          <option value="HOTEL">ðŸ¨ Hotel</option>
+          <option value="ACTIVITY">ðŸŽ¯ Actividad</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Detalles</label>
+        <textarea id="newResDetails" placeholder="AerolÃ­nea, nÃºmero de vuelo, hotel, descripciÃ³n de actividad..." rows="2"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Precio</label>
+          <input type="number" id="newResPrice" placeholder="350000" />
+        </div>
+        <div class="form-group">
+          <label>Moneda</label>
+          <select id="newResCurrency">
+            <option value="COP" selected>COP</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="newResDate" />
+      </div>
+      <div class="alert alert-info">
+        ðŸ”” Las reservas se crean en estado <strong>SIMULADA</strong>. No se procesan pagos reales.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('newReservationModal')">Cancelar</button>
+      <button class="btn-primary" onclick="createReservation()">Registrar Reserva</button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     TOAST NOTIFICATIONS
+========================================================= -->
+<div class="toast-container" id="toastContainer"></div>
+
+</div><!-- /#appShell -->
+
+<script src="app.v6.js"></script>
+<script src="auth.js"></script>
+<script>
+  // Inicializar autenticaciÃ³n cuando la pÃ¡gina cargue
+  document.addEventListener("DOMContentLoaded", () => {
+    Auth.init();
+  });
+
+  // Callback: se llama cuando el usuario inicia sesiÃ³n correctamente
+  window.onUserLoggedIn = function(user) {
+    STATE.userId = user.userId || user.email;
+    STATE.userName = user.name || user.email;
+    document.getElementById("displayUserName").textContent = STATE.userName;
+    document.getElementById("displayUserId").textContent = STATE.userId;
+    document.getElementById("userIdInput").value = STATE.userId;
+    loadDashboardStats();
+  };
+
+  function handleLogout() {
+    if (confirm("Â¿Deseas cerrar sesiÃ³n?")) {
+      Auth.logout();
+    }
+  }
+</script>
+</body>
+</html>

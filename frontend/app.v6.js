@@ -1,24 +1,23 @@
 /* =========================================================
-   TRIPLANNER TU AGENTE DE VIAJE — JavaScript
+   TripPlanner AI — JavaScript Principal
    ========================================================= */
 
 // ---------------------------------------------------------------------------
 // CONFIGURACIÓN — edita estas variables antes de desplegar
 // ---------------------------------------------------------------------------
 const CONFIG = {
-  // AgentCore exige el ARN URL-encoded (no el runtime ID).
+  // URL del OrchestratorAgent en AgentCore (HTTP streaming)
+  // Obtenerla con: agentcore fetch access --name OrchestratorAgent
   AGENT_URL: "https://bedrock-agentcore.us-east-1.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-1%3A762233733426%3Aruntime%2FTripPlanner_OrchestratorAgent-wlgjt0E83A/invocations",
+
+  // URL base del API Gateway (backend Lambda + DynamoDB)
+  // Obtenerla de los outputs del SAM deploy
   API_BASE_URL: "https://x22euoqhp8.execute-api.us-east-1.amazonaws.com/prod",
   COGNITO_REGION: "us-east-1",
   COGNITO_USER_POOL_ID: "us-east-1_b1vipfKMR",
   COGNITO_CLIENT_ID: "4mut3b36os8ardr8ejolh7l3kg",
-  // Si el agente falla, ¿responder con datos simulados? false = mostrar el error real.
   DEMO_FALLBACK: false,
 };
-
-// IMPORTANTE: un `const` de nivel superior NO se convierte en window.CONFIG.
-// auth.js lee `window.CONFIG`, así que lo exponemos explícitamente.
-window.CONFIG = CONFIG;
 
 // ---------------------------------------------------------------------------
 // ESTADO GLOBAL
@@ -59,9 +58,7 @@ function getAuthHeaders(extra = {}) {
     ...extra,
   };
   // Agregar token JWT si está disponible (Cognito)
-  // Nota: `Auth` se declara con `const` en auth.js, por lo que NO existe en
-  // window.Auth. Usamos `typeof` para referirnos al binding léxico global.
-  if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
+  if (window.Auth && Auth.isLoggedIn()) {
     headers["Authorization"] = `Bearer ${Auth.getIdToken()}`;
   }
   return headers;
@@ -69,21 +66,15 @@ function getAuthHeaders(extra = {}) {
 
 // ---------------------------------------------------------------------------
 // HELPER: llamadas al backend (API Gateway con authorizer JWT)
-// Renueva el token si está por expirar y añade el Authorization siempre.
 // ---------------------------------------------------------------------------
 async function apiFetch(path, options = {}) {
   if (typeof Auth !== "undefined" && typeof Auth.ensureFreshToken === "function") {
-    try {
-      await Auth.ensureFreshToken();
-    } catch {
-      // Si el refresh falla seguimos con el token actual (la API responderá 401)
-    }
+    try { await Auth.ensureFreshToken(); } catch (e) { /* ignore */ }
   }
   const url = path.startsWith("http") ? path : `${CONFIG.API_BASE_URL}${path}`;
-  return fetch(url, {
-    ...options,
-    headers: getAuthHeaders(options.headers || {}),
-  });
+  const opts = { ...options };
+  opts.headers = getAuthHeaders(opts.headers || {});
+  return fetch(url, opts);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,137 +138,38 @@ function sendSuggestion(text) {
   sendChatMessage();
 }
 
-async function sendChatMessage() {
-  const input = document.getElementById("chatInput");
-  const text = input.value.trim();
-  if (!text) return;
-
-  // Cancelar streaming previo si existe
-  if (STATE.chatAbortController) {
-    STATE.chatAbortController.abort();
-  }
-
-  input.value = "";
-  appendChatMessage("user", text);
-  setStatus("🤖 TRIPLANNER está procesando...");
-  disableSend(true);
-
-  const assistantBubble = appendChatMessage("assistant", "", true);
-
-  STATE.chatAbortController = new AbortController();
-  let fullText = "";
-
-  try {
-    fullText = await invokeAgent(
-      text,
-      (acumulado) => {
-        // Ocultar bloques <thinking> mientras se streamea
-        let display = acumulado.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
-        if (!display && acumulado.trim()) {
-          display = "Pensando...";
-        }
-        updateStreamBubble(assistantBubble, display);
-      },
-      STATE.chatAbortController.signal
-    );
-
-    // Fin del streaming
-    assistantBubble.classList.remove("streaming");
-    const cleanText = fullText.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
-    if (cleanText) {
-      updateStreamBubble(assistantBubble, cleanText);
-      fullText = cleanText;
-    } else if (fullText.trim()) {
-      const msg = "El agente proceso tu solicitud. (No genero respuesta de texto adicional.)";
-      updateStreamBubble(assistantBubble, msg);
-      fullText = msg;
-    }
-    setStatus("Respuesta completada");
-
-    // Intentar extraer datos estructurados para renderizar componentes
-    renderStructuredData(fullText);
-
-    // Recargar estadísticas por si se crearon datos
-    setTimeout(loadDashboardStats, 1000);
-
-  } catch (err) {
-    if (err.name === "AbortError") {
-      setStatus("⏹ Detenido");
-    } else if (CONFIG.DEMO_FALLBACK) {
-      assistantBubble.classList.remove("streaming");
-      const demoResponse = getDemoResponse(text);
-      updateStreamBubble(assistantBubble, demoResponse);
-      fullText = demoResponse;
-      renderStructuredData(fullText);
-      setStatus("ℹ️ Modo demo (fallback activado)");
-    } else {
-      // Sin fallback: mostramos el error real, para no ocultar fallos.
-      assistantBubble.classList.remove("streaming");
-      updateStreamBubble(
-        assistantBubble,
-        `⚠️ No se pudo contactar al agente.\n\n${err.message}`
-      );
-      setStatus("❌ Error al invocar al agente");
-      console.error("Error invocando al agente:", err);
-    }
-  } finally {
-    disableSend(false);
-    STATE.chatAbortController = null;
-    setTimeout(() => setStatus(""), 4000);
-  }
-}
-
 // ---------------------------------------------------------------------------
-// AGENTE — invocación al runtime de AgentCore (JWT + streaming SSE)
+// AGENTE - invocacion al runtime de AgentCore (JWT + streaming SSE)
 // ---------------------------------------------------------------------------
-
-// El runtime exige un session id de 33-256 caracteres. No usamos
-// crypto.randomUUID() porque el sitio S3 es HTTP (contexto no seguro).
 function getAgentSessionId() {
   let id = localStorage.getItem("tp_session_id");
   if (!id || id.length < 33) {
     const rnd = () => Math.random().toString(36).slice(2);
-    id = `${Date.now().toString(36)}-${rnd()}-${rnd()}-${rnd()}`.padEnd(40, "0");
+    id = (Date.now().toString(36) + "-" + rnd() + "-" + rnd() + "-" + rnd()).padEnd(40, "0");
     localStorage.setItem("tp_session_id", id);
   }
   return id;
 }
 
-function newAgentSessionId() {
-  localStorage.removeItem("tp_session_id");
-  return getAgentSessionId();
-}
-
-/**
- * Invoca al agente y va entregando el texto según llega.
- * @param {string} prompt
- * @param {(textoAcumulado: string) => void} [onDelta]
- * @returns {Promise<string>} texto completo
- */
 async function invokeAgent(prompt, onDelta, signal) {
   const token = (typeof Auth !== "undefined" && Auth.getIdToken) ? Auth.getIdToken() : null;
-  if (!token) throw new Error("Sesión no iniciada: no hay token de Cognito.");
+  if (!token) throw new Error("Sesion no iniciada: no hay token de Cognito.");
 
   const response = await fetch(CONFIG.AGENT_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
+      "Authorization": "Bearer " + token,
       "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": getAgentSessionId(),
     },
-    body: JSON.stringify({
-      prompt,
-      userId: STATE.userId,
-      // El agente reenvía este token a la API (que exige JWT de Cognito)
-      authToken: token,
-    }),
-    signal,
+    body: JSON.stringify({ prompt: prompt, userId: STATE.userId, authToken: token }),
+    signal: signal,
   });
 
   if (!response.ok) {
     let detail = "";
-    try { detail = (await response.text()).slice(0, 400); } catch {}
-    throw new Error(`HTTP ${response.status} ${response.statusText}${detail ? " — " + detail : ""}`);
+    try { detail = (await response.text()).slice(0, 400); } catch (e) {}
+    throw new Error("HTTP " + response.status + " " + response.statusText + (detail ? " - " + detail : ""));
   }
 
   const reader = response.body.getReader();
@@ -292,22 +184,19 @@ async function invokeAgent(prompt, onDelta, signal) {
       if (!line.startsWith("data:")) continue;
       let payload = line.slice(5).trim();
       if (!payload || payload === "[DONE]") continue;
-
       let piece = payload;
       try {
         const parsed = JSON.parse(payload);
         if (typeof parsed === "string") {
-          // AgentCore manda: data: "trozo de texto"
           piece = parsed;
         } else if (parsed && typeof parsed === "object") {
-          piece = parsed.data ?? parsed.text ?? parsed.content ?? parsed.delta ?? "";
+          piece = parsed.data || parsed.text || parsed.content || parsed.delta || "";
         } else {
           piece = "";
         }
-      } catch {
-        // No era JSON: texto plano
+      } catch (e) {
+        // no era JSON: texto plano
       }
-
       if (!piece) continue;
       full += piece;
       if (onDelta) onDelta(full);
@@ -315,15 +204,85 @@ async function invokeAgent(prompt, onDelta, signal) {
   };
 
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    const r = await reader.read();
+    if (r.done) break;
+    buffer += decoder.decode(r.value, { stream: true });
     consume(false);
   }
   buffer += decoder.decode();
   consume(true);
 
   return full;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Cancelar streaming previo si existe
+  if (STATE.chatAbortController) {
+    STATE.chatAbortController.abort();
+  }
+
+  input.value = "";
+  appendChatMessage("user", text);
+  setStatus("🤖 TripPlanner AI está procesando...");
+  disableSend(true);
+
+  const assistantBubble = appendChatMessage("assistant", "", true);
+
+  STATE.chatAbortController = new AbortController();
+  let fullText = "";
+
+  try {
+    fullText = await invokeAgent(
+      text,
+      (acumulado) => {
+        let display = acumulado.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
+        if (!display && acumulado.trim()) {
+          display = "Pensando...";
+        }
+        updateStreamBubble(assistantBubble, display);
+      },
+      STATE.chatAbortController.signal
+    );
+
+    assistantBubble.classList.remove("streaming");
+    const cleanText = fullText.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
+    if (cleanText) {
+      updateStreamBubble(assistantBubble, cleanText);
+      fullText = cleanText;
+    } else if (fullText.trim()) {
+      const msg = "El agente proceso tu solicitud. (No genero respuesta de texto adicional.)";
+      updateStreamBubble(assistantBubble, msg);
+      fullText = msg;
+    }
+    setStatus("Respuesta completada");
+
+    renderStructuredData(fullText);
+    setTimeout(loadDashboardStats, 1000);
+
+  } catch (err) {
+    if (err.name === "AbortError") {
+      setStatus("Detenido");
+    } else if (CONFIG.DEMO_FALLBACK) {
+      assistantBubble.classList.remove("streaming");
+      const demoResponse = getDemoResponse(text);
+      updateStreamBubble(assistantBubble, demoResponse);
+      fullText = demoResponse;
+      renderStructuredData(fullText);
+      setStatus("Modo demo (fallback activado)");
+    } else {
+      assistantBubble.classList.remove("streaming");
+      updateStreamBubble(assistantBubble, "No se pudo contactar al agente.\n\n" + err.message);
+      setStatus("Error al invocar al agente");
+    }
+  } finally {
+    disableSend(false);
+    STATE.chatAbortController = null;
+    setTimeout(() => setStatus(""), 4000);
+  }
 }
 
 function appendChatMessage(role, text, streaming = false) {
@@ -348,20 +307,14 @@ function appendChatMessage(role, text, streaming = false) {
 
 function renderMarkdown(text) {
   if (!text) return "";
-  // Escapar HTML para evitar XSS
   let html = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-  // Negrita **texto**
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  // Cursiva *texto* (solo si no es negrita)
   html = html.replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, "$1<em>$2</em>");
-  // Código inline `texto`
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // Listas con guión al inicio de línea
   html = html.replace(/(^|\n)- (.+)/g, "$1• $2");
-  // Saltos de línea
   html = html.replace(/\n/g, "<br>");
   return html;
 }
@@ -541,7 +494,7 @@ La reserva está registrada en tu viaje a Cartagena. Las reservas simuladas no i
 ¿Deseas registrar también el hotel o alguna actividad?`;
   }
 
-  return `¡Hola! Soy TRIPLANNER, tu asistente de viajes inteligente.
+  return `¡Hola! Soy TripPlanner AI, tu asistente de viajes inteligente.
 
 Puedo ayudarte con:
 • 🔍 **Buscar vuelos** entre cualquier aeropuerto
@@ -579,9 +532,9 @@ async function searchFlights() {
     if (CONFIG.DEMO_FALLBACK) {
       renderFlightResultsDemo(origin, destination, date);
     } else {
-      showToast(`No se pudo buscar vuelos: ${err.message}`, "error");
+      showToast("No se pudo buscar vuelos: " + err.message, "error");
       document.getElementById("flightsResults").innerHTML =
-        `<div class="card" style="grid-column:1/-1; white-space:pre-wrap; font-size:14px;">⚠️ No se pudo contactar al agente.\n\n${err.message}</div>`;
+        '<div class="card" style="grid-column:1/-1; white-space:pre-wrap; font-size:14px;">No se pudo contactar al agente.\n\n' + err.message + '</div>';
     }
   } finally {
     document.getElementById("flightsLoading").style.display = "none";
@@ -715,9 +668,9 @@ async function searchWeather() {
     if (CONFIG.DEMO_FALLBACK) {
       renderWeatherCardsDemo(city, startDate, days);
     } else {
-      showToast(`No se pudo consultar el clima: ${err.message}`, "error");
+      showToast("No se pudo consultar el clima: " + err.message, "error");
       document.getElementById("weatherResults").innerHTML =
-        `<div class="card" style="white-space:pre-wrap; font-size:14px;">⚠️ No se pudo contactar al agente.\n\n${err.message}</div>`;
+        '<div class="card" style="white-space:pre-wrap; font-size:14px;">No se pudo contactar al agente.\n\n' + err.message + '</div>';
     }
   } finally {
     document.getElementById("weatherLoading").style.display = "none";
@@ -908,32 +861,26 @@ async function createTrip() {
 }
 
 function deleteTrip(tripId) {
-  if (!confirm("¿Eliminar este viaje? También se borrarán su itinerario y reservas.")) return;
-
-  const removeLocally = () => {
-    STATE.trips = STATE.trips.filter(t => t.tripId !== tripId);
-    localStorage.setItem("tp_trips", JSON.stringify(STATE.trips));
-    renderTrips();
-    loadDashboardStats();
-  };
-
-  return (async () => {
-    try {
-      const res = await apiFetch(`/trips/${encodeURIComponent(tripId)}`, {
-        method: "DELETE",
-      });
-      // 404 = ya no existe en el servidor: igual lo quitamos de la vista
-      if (!res.ok && res.status !== 404) {
-        throw new Error(`HTTP ${res.status}`);
+  if (!confirm("¿Eliminar este viaje?")) return;
+  apiFetch(`/trips/${encodeURIComponent(tripId)}`, { method: "DELETE" })
+    .then(res => {
+      if (res.ok) {
+        STATE.trips = STATE.trips.filter(t => t.tripId !== tripId);
+        localStorage.setItem("tp_trips", JSON.stringify(STATE.trips));
+        renderTrips();
+        loadDashboardStats();
+        showToast("Viaje eliminado", "success");
+      } else {
+        showToast("Error al eliminar viaje", "error");
       }
-      removeLocally();
-      showToast("Viaje eliminado", "info");
-    } catch (err) {
-      // Si el backend falla, el viaje reaparecerá al recargar: avisamos.
-      removeLocally();
-      showToast("Eliminado solo en este navegador: el servidor no confirmó el borrado", "error");
-    }
-  })();
+    })
+    .catch(() => {
+      STATE.trips = STATE.trips.filter(t => t.tripId !== tripId);
+      localStorage.setItem("tp_trips", JSON.stringify(STATE.trips));
+      renderTrips();
+      loadDashboardStats();
+      showToast("Viaje eliminado (modo demo)", "info");
+    });
 }
 
 async function viewItinerary(tripId, destination) {
@@ -985,7 +932,7 @@ async function viewItinerary(tripId, destination) {
           ]
         },
       ],
-      notes: "Itinerario generado por TRIPLANNER (modo demo)"
+      notes: "Itinerario generado por TripPlanner AI (modo demo)"
     });
   }
 }
@@ -999,25 +946,23 @@ function renderItineraryContent(itinerary) {
 
   const typeIcons = { TOURISM: "🏛️", FOOD: "🍽️", LOGISTICS: "🚗", EXCURSION: "🚢", BEACH: "🏖️", CULTURE: "🎭", SHOPPING: "🛍️", LEISURE: "😴", ACTIVITY: "🎯" };
 
-  const dest = STATE.currentTripDestination || (itinerary.title || "").replace(/.*a\s+/i, "").trim() || "";
+  const dest = STATE.currentTripDestination || "";
   const mapQuery = encodeURIComponent(dest || "Cartagena");
 
   const extras = `
     <div class="itinerary-extras" style="margin-top:16px; display:flex; flex-direction:column; gap:14px;">
       <div class="card" style="padding:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-          <h3 style="margin:0; font-size:15px;">🗺️ Mapa del destino</h3>
-          <button class="btn btn-sm btn-outline" onclick="window.print()">🖨️ Descargar PDF</button>
+          <h3 style="margin:0; font-size:15px;">Mapa del destino</h3>
+          <button class="btn btn-sm btn-outline" onclick="window.print()">Descargar PDF</button>
         </div>
         <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px;">
-          <iframe
-            title="Mapa ${dest}"
-            src="https://www.google.com/maps?q=${mapQuery}&output=embed"
+          <iframe title="Mapa ${dest}" src="https://www.google.com/maps?q=${mapQuery}&output=embed"
             style="position:absolute; top:0; left:0; width:100%; height:100%; border:0;"
             loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
         </div>
         <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">
-          Ubicación de ${dest || "tu destino"}. Abre en Google Maps para rutas detalladas.
+          Ubicacion de ${dest || "tu destino"}. Abre en Google Maps para rutas detalladas.
         </p>
       </div>
     </div>
@@ -1057,7 +1002,7 @@ async function loadReservations(tripIdFilter = null) {
   document.getElementById("reservationsList").innerHTML = "";
 
   const path = tripIdFilter
-    ? `/reservations?tripId=${encodeURIComponent(tripIdFilter)}`
+    ? `/reservations?tripId=${tripIdFilter}`
     : `/reservations`;
 
   try {
