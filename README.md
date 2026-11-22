@@ -1,108 +1,125 @@
-# AgentCore Project
+# TripPlanner AI — Trabajo Final · Programación Agéntica
 
-This project was created with the [AgentCore CLI](https://github.com/aws/agentcore-cli).
+Plataforma web inteligente para planificar y gestionar viajes, construida sobre una arquitectura multiagente (Strands Agents + Amazon Bedrock AgentCore) con backend serverless en AWS (Lambda, API Gateway, DynamoDB) y frontend estático en S3.
 
-## Project Structure
+## Arquitectura (dos canales independientes)
 
 ```
-my-project/
-├── AGENTS.md               # AI coding assistant context
-├── agentcore/
-│   ├── agentcore.json      # Project config (agents, memories, credentials, gateways, evaluators)
-│   ├── aws-targets.json    # Deployment targets (account + region)
-│   ├── .env.local          # Secrets — API keys (gitignored)
-│   ├── .llm-context/       # TypeScript type definitions for AI assistants
-│   │   ├── agentcore.ts    # AgentCoreProjectSpec types
-│   │   └── aws-targets.ts  # Deployment target types
-│   └── cdk/                # CDK infrastructure (@aws/agentcore-cdk)
-├── app/                    # Agent application code
-└── evaluators/             # Custom evaluator code (if any)
+                USUARIO
+                  │
+          ┌───────┴───────┐
+          │   FRONTEND    │  HTML/CSS/JS · Amazon S3 (CloudFront opcional)
+          │   (S3)        │
+          └───────┬───────┘
+                  │
+     ┌────────────┴────────────┐
+     │                         │
+CANAL 1 (negocio)        CANAL 2 (agéntico)
+REST/JSON                HTTP Streaming (directo, sin API Gateway)
+     │                         │
+  API Gateway              Bedrock AgentCore
+  (JWT Cognito)            Orchestrator Agent
+     │                         │
+  9 Lambdas                 ├── Flight Agent  → MCP de vuelos
+  (validación)              ├── Weather Agent → MCP de clima
+     │                      └── Tools de negocio → Lambdas
+     └──────┬──────────────┬──────┘
+            │              │
+         DynamoDB (fuente de verdad)
+         Users · Preferences · Trips · Itineraries · Reservations
 ```
 
-## Getting Started
+- **Canal 1** (operaciones de negocio): frontend → API Gateway (autorizador JWT Cognito) → Lambda → DynamoDB.
+- **Canal 2** (interacción agéntica): frontend → HTTP Streaming directo a AgentCore (Orchestrator → Flight/Weather Agents + Tools). No pasa por API Gateway.
+- IAM con privilegios mínimos; CORS restringido; sin credenciales AWS en el frontend.
 
-### Prerequisites
+## Agentes (multiagente conservada, no simulación monolítica)
 
-- **Node.js** 20.x or later
-- **Python 3.10+** and **uv** for Python agents ([install uv](https://docs.astral.sh/uv/getting-started/installation/))
-- **AWS credentials** configured (`aws configure` or environment variables)
-- **Docker** (only for Container build agents)
+| Agente | Protocolo | Rol |
+|---|---|---|
+| Orchestrator Agent | HTTP (streaming) | Interactúa con el usuario, coordina especialistas |
+| Flight Agent | A2A | Consulta vuelos vía MCP |
+| Weather Agent | A2A | Consulta clima vía MCP |
 
-### Development
+## Modelo de datos (DynamoDB)
 
-Run your agent locally:
+| Tabla | PK / SK | Atributos clave |
+|---|---|---|
+| `TripPlanner-Users-prod` (implícito en Cognito) | — | userId (email), nombre |
+| `TripPlanner-Trips-prod` | `userId` (PK) + `tripId` (SK) | destination, origin, startDate, endDate, travelers, budget, currency, preferences, notes, status |
+| `TripPlanner-Itineraries-prod` | `tripId` (PK) + `itineraryId` (SK) | days[{date, activities[{time,description,location,type}]}], notes |
+| `TripPlanner-Reservations-prod` | `userId` (PK) + `reservationId` (SK) | tripId, type (FLIGHT/HOTEL/ACTIVITY), details, price, currency, date, status (SIMULADA/PENDIENTE/CONFIRMADA) |
 
+Estados de reserva: `SIMULADA` (registrada por el sistema, caso esperado), `PENDIENTE`, `CONFIRMADA` (solo si se integra proveedor real). Etiquetas visibles en la UI.
+
+## APIs (API Gateway `x22euoqhp8`, autorizador JWT Cognito)
+
+| Método | Ruta | Lambda |
+|---|---|---|
+| GET | /trips | GetTrips |
+| POST | /trips | CreateTrip |
+| PUT | /trips/{tripId} | UpdateTrip |
+| DELETE | /trips/{tripId} | DeleteTrip (cascade itinerarios+reservas) |
+| GET | /trips/{tripId}/itinerary | (handler en GetTrips/itinerary) |
+| POST | /trips/{tripId}/itinerary | CreateItinerary |
+| PUT | /trips/{tripId}/itinerary/{itineraryId} | UpdateItinerary |
+| GET | /reservations | GetReservations |
+| POST | /reservations | CreateReservation |
+| PUT | /reservations/{reservationId} | UpdateReservation |
+
+## Tools del agente (respaldadas por Lambdas)
+
+CreateTrip · GetTrips · UpdateTrip · DeleteTrip · CreateItinerary · UpdateItinerary · CreateReservation · GetReservations · UpdateReservation
+
+## Integración de agentes
+
+- Frontend consume el endpoint de HTTP streaming de AgentCore **directamente** (no vía API Gateway): `POST …/runtimes/<ARN>/invocations` con `Authorization: Bearer <IdToken>` y `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`.
+- El Orchestrator reenvía el token del usuario a la API (JWT) para operaciones de negocio.
+- Los agentes Flight/Weather usan MCP para datos externos.
+- Los agentes devuelven texto + datos estructurados; el frontend los renderiza como componentes (Agent-Driven UI: tarjetas de vuelos, tarjetas de clima, agenda de itinerario, tarjetas de viajes, listado de reservas).
+
+## Funcionalidades opcionales implementadas
+
+- **Mapas y rutas**: embed de Google Maps en la vista de itinerario (destino).
+- **Exportación PDF**: botón "Descargar PDF" (impresión con CSS dedicado).
+
+## Instrucciones de ejecución (desde cero)
+
+### Pre-requisitos
+- Python 3.12, AWS CLI configurado (cuenta `762233733426`, región `us-east-1`), AWS SAM CLI, AgentCore CLI, Node.js 20+.
+
+### 1. Backend serverless
 ```bash
-agentcore dev
+cd backend
+sam build
+sam deploy --guided   # Stack: TripPlanner-Backend, Stage: prod
+# Copiar ApiBaseUrl del output
 ```
 
-### Validate Invocation Input
+### 2. Configurar agentcore.json
+Editar `agentcore/agentcore.json` → `API_BASE_URL` con la URL del API Gateway.
 
-Validate runtime invocation payloads before forwarding them to an agent framework. Keep user prompts typed as strings
-and pass only prompt text to the agent.
-
-### Deployment
-
-Deploy to AWS:
-
+### 3. Desplegar agentes
 ```bash
-agentcore deploy
+agentcore deploy --target dev -y
 ```
 
-## Commands
+### 4. Frontend
+Subir `frontend/*` a un bucket S3 con hosting estático:
+```bash
+aws s3 sync frontend/ s3://<bucket>/ --delete
+```
+Actualizar `CONFIG.AGENT_URL` y `CONFIG.API_BASE_URL` en `frontend/app.js`.
 
-| Command | Description |
-| --- | --- |
-| `agentcore create` | Create a new AgentCore project |
-| `agentcore add` | Add resources (agent, memory, credential, gateway, evaluator, policy) |
-| `agentcore remove` | Remove resources |
-| `agentcore dev` | Run agent locally with hot-reload |
-| `agentcore deploy` | Deploy to AWS via CDK |
-| `agentcore status` | Show deployment status |
-| `agentcore invoke` | Invoke agent (local or deployed) |
-| `agentcore logs` | View agent logs |
-| `agentcore traces` | View agent traces |
-| `agentcore eval` | Run evaluations |
-| `agentcore package` | Package agent artifacts |
-| `agentcore validate` | Validate configuration |
-| `agentcore pause` | Pause a deployed agent |
-| `agentcore resume` | Resume a paused agent |
-| `agentcore fetch` | Fetch remote resource definitions |
-| `agentcore import` | Import existing resources |
-| `agentcore update` | Check for CLI updates |
+### 5. Verificar
+Abrir la URL del sitio S3, iniciar sesión con un usuario de Cognito y ejecutar el escenario obligatorio (Cartagena, 4 días, Bogotá, 2 viajeros, presupuesto 5M).
 
-## Configuration
+## Seguridad
+- JWT de Cognito en API Gateway (valida `aud` con el IdToken).
+- `userId` derivado del token, nunca del header `X-User-Id` (anti-spoofing).
+- CORS restringido a orígenes específicos.
+- IAM mínimo privilegio; validación de tipos/rangos/fechas/estados en Lambda.
+- Sin almacenamiento de datos de tarjetas (reservas simuladas).
 
-Edit the JSON files in `agentcore/` to configure your project. See `agentcore/.llm-context/` for type definitions and validation constraints.
-
-The project uses a **flat resource model** — agents, memories, credentials, gateways, evaluators, and policies are top-level arrays in `agentcore.json`. Resources are independent; agents discover memories and credentials at runtime via environment variables or SDK calls.
-
-## Resources
-
-| Resource | Purpose |
-| --- | --- |
-| Agent (runtime) | HTTP, MCP, or A2A agent deployed to AgentCore Runtime |
-| Memory | Persistent context storage with configurable strategies |
-| Credential | API key or OAuth credential providers |
-| Gateway | MCP gateway that routes tool calls to targets |
-| Gateway Target | Tool implementation (Lambda, MCP server, OpenAPI, Smithy, API Gateway) |
-| Evaluator | Custom LLM-as-a-Judge or code-based evaluation |
-| Online Eval Config | Continuous evaluation pipeline for deployed agents |
-| Policy | Cedar authorization policies for gateway tools |
-
-### Agent Types
-
-- **Template agents**: Created from framework templates (Strands, LangChain/LangGraph, GoogleADK, OpenAI Agents, Autogen)
-- **BYO agents**: Bring your own code with `agentcore add agent --type byo`
-- **Import agents**: Import existing Bedrock agents with `agentcore import`
-
-### Build Types
-
-- **CodeZip**: Python source packaged as a zip and deployed directly to AgentCore Runtime
-- **Container**: Docker image built via CodeBuild (ARM64), pushed to ECR, and deployed to AgentCore Runtime
-
-## Documentation
-
-- [AgentCore CLI](https://github.com/aws/agentcore-cli)
-- [AgentCore CDK Constructs](https://github.com/aws/agentcore-l3-cdk-constructs)
-- [Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/)
+## Créditos
+Asignatura: Programación Agéntica · Programa: Ingeniería de Sistemas · Plazo: 15 días.
