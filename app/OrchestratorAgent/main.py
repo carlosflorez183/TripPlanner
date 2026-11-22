@@ -730,9 +730,66 @@ async def invoke(payload, context):
     _AUTH_TOKEN.set(payload.get("authToken") or "")
 
     agent = get_or_create_agent(session_id, actor_id, messages=messages)
+
+    # Filtra los bloques <think> del stream para que no lleguen al frontend.
+    # Mantiene streaming para el contenido útil (fuera de <think>).
+    OPEN_TAG = "<thinking>"
+    CLOSE_TAG = "</thinking>"
+    buf = ""
+    state = "normal"  # normal | thinking
+
+    def _partial_tail(s, tag):
+        s_low = s.lower()
+        tag_low = tag.lower()
+        maxk = min(len(s_low), len(tag_low) - 1)
+        for k in range(maxk, 0, -1):
+            if s_low.endswith(tag_low[:k]):
+                return k
+        return 0
+
     async for event in agent.stream_async(prompt):
-        if isinstance(event, dict) and "data" in event and isinstance(event["data"], str):
-            yield event["data"]
+        if not (isinstance(event, dict) and "data" in event and isinstance(event["data"], str)):
+            continue
+        buf += event["data"]
+        out = ""
+        while True:
+            if state == "normal":
+                low = buf.lower()
+                idx = low.find(OPEN_TAG.lower())
+                if idx == -1:
+                    hold = _partial_tail(buf, OPEN_TAG)
+                    safe_len = len(buf) - hold
+                    out += buf[:safe_len]
+                    buf = buf[safe_len:]
+                    break
+                else:
+                    out += buf[:idx]
+                    buf = buf[idx:]
+                    if len(buf) >= len(OPEN_TAG):
+                        buf = buf[len(OPEN_TAG):]
+                        state = "thinking"
+                    else:
+                        break
+            else:  # thinking
+                low = buf.lower()
+                idx = low.find(CLOSE_TAG.lower())
+                if idx == -1:
+                    hold = _partial_tail(buf, CLOSE_TAG)
+                    buf = buf[-hold:] if hold else ""
+                    break
+                else:
+                    buf = buf[idx + len(CLOSE_TAG):]
+                    state = "normal"
+        if out:
+            yield out
+
+    # Flush final: solo si quedó en estado normal con contenido útil
+    if state == "normal" and buf:
+        hold = _partial_tail(buf, OPEN_TAG)
+        safe = buf[:-hold] if hold else buf
+        if safe:
+            yield safe
+    # Si quedó en thinking (razonamiento incompleto), se descarta.
 
 
 if __name__ == "__main__":
