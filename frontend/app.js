@@ -239,7 +239,6 @@ async function sendChatMessage() {
     fullText = await invokeAgent(
       text,
       (acumulado) => {
-        // El backend ya filtra <thinking>; solo mostrar contenido útil
         let display = acumulado.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
         updateStreamBubble(assistantBubble, display);
       },
