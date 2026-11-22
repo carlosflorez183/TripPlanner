@@ -283,7 +283,7 @@ a { cursor: pointer; color: var(--primary); text-decoration: underline; }
 .message-bubble li { margin: 2px 0; }
 
 .message.streaming .message-bubble::after {
-  content: 'â–‹';
+  content: '\258B';
   animation: blink .7s step-end infinite;
 }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
@@ -415,7 +415,7 @@ a { cursor: pointer; color: var(--primary); text-decoration: underline; }
 .flight-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .flight-card.cheapest { border-color: var(--success); }
 .flight-card.cheapest::before {
-  content: 'ðŸ’° Mejor precio';
+  content: '\1F4B0 Mejor precio';
   position: absolute;
   top: -11px;
   left: 14px;
