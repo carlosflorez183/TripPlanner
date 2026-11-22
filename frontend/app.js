@@ -171,22 +171,23 @@ async function sendChatMessage() {
     fullText = await invokeAgent(
       text,
       (acumulado) => {
-        // Ocultar bloques <thinking> mientras se streamea (cuando ya están completos)
-        const display = acumulado.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
-        updateStreamBubble(assistantBubble, display || acumulado);
+        // Ocultar bloques <thinking> mientras se streamea
+        let display = acumulado.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
+        if (!display && acumulado.trim()) {
+          display = "🤔 Pensando...";
+        }
+        updateStreamBubble(assistantBubble, display);
       },
       STATE.chatAbortController.signal
     );
 
     // Fin del streaming
     assistantBubble.classList.remove("streaming");
-    // Limpiar cualquier <thinking> residual del texto final
     const cleanText = fullText.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
     if (cleanText) {
       updateStreamBubble(assistantBubble, cleanText);
       fullText = cleanText;
     } else if (fullText.trim()) {
-      // El agente solo emitió razonamiento interno; mostrar un mensaje amable
       const msg = "✅ El agente procesó tu solicitud. (No generó respuesta de texto adicional.)";
       updateStreamBubble(assistantBubble, msg);
       fullText = msg;
