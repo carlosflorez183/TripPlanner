@@ -718,10 +718,34 @@ def build_agent() -> Agent:
 # Entrypoint HTTP (AgentCore Runtime)
 # ---------------------------------------------------------------------------
 
+def _actor_from_context(context) -> str:
+    """Identifica al usuario desde el JWT (ya validado por el authorizer del runtime).
+
+    Usa el claim `sub` (UUID de Cognito, solo letras/números/guiones) para que la
+    memoria de preferencias sea por usuario. Sin token válido no hay actor.
+    """
+    import base64
+    headers = getattr(context, "request_headers", None) or {}
+    auth = ""
+    for k, v in headers.items():
+        if k.lower() == "authorization":
+            auth = v or ""
+            break
+    if not auth.lower().startswith("bearer "):
+        return "anonymous"
+    try:
+        segment = auth.split(" ", 1)[1].split(".")[1]
+        segment += "=" * (-len(segment) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(segment))
+        sub = claims.get("sub") or ""
+        return sub if sub else "anonymous"
+    except Exception:
+        return "anonymous"
+
 @app.entrypoint
 async def invoke(payload, context):
     session_id = getattr(context, "session_id", "default-session") or "default-session"
-    actor_id = getattr(context, "actor_id", "default-user") or "default-user"
+    actor_id = _actor_from_context(context)
     prompt = _extract_prompt(payload)
     messages = _extract_messages(payload)
 
