@@ -947,23 +947,16 @@ function renderItineraryContent(itinerary) {
   const typeIcons = { TOURISM: "🏛️", FOOD: "🍽️", LOGISTICS: "🚗", EXCURSION: "🚢", BEACH: "🏖️", CULTURE: "🎭", SHOPPING: "🛍️", LEISURE: "😴", ACTIVITY: "🎯" };
 
   const dest = STATE.currentTripDestination || "";
-  const mapQuery = encodeURIComponent(dest || "Cartagena");
 
   const extras = `
     <div class="itinerary-extras" style="margin-top:16px; display:flex; flex-direction:column; gap:14px;">
       <div class="card" style="padding:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-          <h3 style="margin:0; font-size:15px;">Mapa del destino</h3>
+          <h3 style="margin:0; font-size:15px;">Mapa de actividades</h3>
           <button class="btn btn-sm btn-outline" onclick="window.print()">Descargar PDF</button>
         </div>
-        <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px;">
-          <iframe title="Mapa ${dest}" src="https://www.google.com/maps?q=${mapQuery}&output=embed"
-            style="position:absolute; top:0; left:0; width:100%; height:100%; border:0;"
-            loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-        </div>
-        <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">
-          Ubicacion de ${dest || "tu destino"}. Abre en Google Maps para rutas detalladas.
-        </p>
+        <div id="itineraryMap" style="height:380px; border-radius:8px; overflow:hidden;"></div>
+        <p id="itineraryMapStatus" style="font-size:12px; color:var(--text-muted); margin-top:6px;">Ubicando actividades en el mapa...</p>
       </div>
     </div>
   `;
@@ -982,6 +975,117 @@ function renderItineraryContent(itinerary) {
       `).join("")}
     </div>
   `).join("") + (itinerary.notes ? `<p style="color:var(--text-muted); font-size:13px; margin-top:12px;">📝 ${itinerary.notes}</p>` : "") + extras;
+  buildItineraryMap(itinerary, dest || "Colombia");
+}
+
+const GEO_CACHE_KEY = "tp_geo_cache";
+let itineraryMapInstance = null;
+
+function escHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function getGeoCache() {
+  try { return JSON.parse(localStorage.getItem(GEO_CACHE_KEY) || "{}"); } catch (e) { return {}; }
+}
+
+// Geocodifica con Nominatim (OpenStreetMap, gratis). Cacheado en localStorage.
+async function geocodePlace(query) {
+  const cache = getGeoCache();
+  if (cache[query]) return { point: cache[query], fromCache: true };
+  const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=es&q=" + encodeURIComponent(query);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { point: null, fromCache: false };
+    const data = await res.json();
+    if (!data.length) return { point: null, fromCache: false };
+    const point = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    cache[query] = point;
+    localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache));
+    return { point, fromCache: false };
+  } catch (e) {
+    return { point: null, fromCache: false };
+  }
+}
+
+async function buildItineraryMap(itinerary, dest) {
+  const el = document.getElementById("itineraryMap");
+  const status = document.getElementById("itineraryMapStatus");
+  if (!el || typeof L === "undefined") {
+    if (status) status.textContent = "No se pudo cargar el mapa (revisa tu conexión).";
+    return;
+  }
+  if (itineraryMapInstance) { itineraryMapInstance.remove(); itineraryMapInstance = null; }
+
+  const map = L.map(el).setView([4.6, -74.07], 5);
+  itineraryMapInstance = map;
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: "© OpenStreetMap",
+  }).addTo(map);
+
+  const stops = [];
+  (itinerary.days || []).forEach((day, dayIdx) => {
+    (day.activities || []).forEach((act) => {
+      if (act.location) stops.push({ dayIdx, date: day.date, time: act.time, desc: act.description, location: act.location });
+    });
+  });
+
+  const usedCoords = {};
+  const dayPaths = {};
+  let missing = 0;
+  for (let i = 0; i < stops.length; i++) {
+    if (itineraryMapInstance !== map) return; // el usuario cambió de itinerario
+    const stop = stops[i];
+    const query = stop.location.includes(dest) ? stop.location : `${stop.location}, ${dest}`;
+    if (status) status.textContent = `Ubicando actividades ${i + 1} de ${stops.length}...`;
+
+    const cached = !!getGeoCache()[query];
+    const { point } = await geocodePlace(query);
+    if (!cached && i < stops.length - 1) await new Promise(r => setTimeout(r, 1100)); // límite de Nominatim: 1 req/s
+
+    if (!point) { missing++; continue; }
+
+    // Separa marcadores que caen en el mismo punto (p. ej. varias actividades en la misma ciudad)
+    const key = point.lat.toFixed(4) + "," + point.lng.toFixed(4);
+    const n = usedCoords[key] || 0;
+    usedCoords[key] = n + 1;
+    const lat = point.lat + n * 0.0009;
+    const lng = point.lng + n * 0.0009;
+
+    const number = stops.indexOf(stop) + 1;
+    const icon = L.divIcon({
+      className: "",
+      html: `<div style="background:#1a56db; color:#fff; border:2px solid #fff; border-radius:50%; width:26px; height:26px; line-height:22px; text-align:center; font-weight:700; font-size:12px; box-shadow:0 1px 4px rgba(0,0,0,.4);">${number}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+    });
+    L.marker([lat, lng], { icon })
+      .bindPopup(`<b>${escHtml(stop.date || "")} · ${escHtml(stop.time || "")}</b><br>${escHtml(stop.desc)}<br><small>📍 ${escHtml(stop.location)}</small>`)
+      .addTo(map);
+
+    if (!dayPaths[stop.dayIdx]) dayPaths[stop.dayIdx] = [];
+    dayPaths[stop.dayIdx].push([lat, lng]);
+  }
+
+  // Línea punteada por día para mostrar el recorrido
+  Object.values(dayPaths).forEach(path => {
+    if (path.length > 1) L.polyline(path, { color: "#1a56db", weight: 3, dashArray: "6 6", opacity: 0.7 }).addTo(map);
+  });
+
+  const allPoints = Object.values(dayPaths).flat();
+  if (allPoints.length) {
+    map.fitBounds(allPoints, { padding: [30, 30], maxZoom: 14 });
+  } else {
+    const c = await geocodePlace(dest);
+    if (itineraryMapInstance === map && c.point) map.setView([c.point.lat, c.point.lng], 12);
+  }
+
+  if (status) {
+    status.textContent = missing
+      ? `${stops.length - missing} de ${stops.length} actividades ubicadas. Algunas no se encontraron en el mapa.`
+      : `${stops.length} actividades ubicadas en el mapa.`;
+  }
 }
 
 function closeItinerary() {
