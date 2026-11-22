@@ -174,7 +174,7 @@ async function sendChatMessage() {
         // Ocultar bloques <thinking> mientras se streamea
         let display = acumulado.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
         if (!display && acumulado.trim()) {
-          display = "🤔 Pensando...";
+          display = "Pensando...";
         }
         updateStreamBubble(assistantBubble, display);
       },
@@ -188,11 +188,11 @@ async function sendChatMessage() {
       updateStreamBubble(assistantBubble, cleanText);
       fullText = cleanText;
     } else if (fullText.trim()) {
-      const msg = "✅ El agente procesó tu solicitud. (No generó respuesta de texto adicional.)";
+      const msg = "El agente proceso tu solicitud. (No genero respuesta de texto adicional.)";
       updateStreamBubble(assistantBubble, msg);
       fullText = msg;
     }
-    setStatus("✅ Respuesta completada");
+    setStatus("Respuesta completada");
 
     // Intentar extraer datos estructurados para renderizar componentes
     renderStructuredData(fullText);
