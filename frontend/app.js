@@ -337,7 +337,7 @@ function appendChatMessage(role, text, streaming = false) {
 
   const bubble = document.createElement("div");
   bubble.className = "message-bubble";
-  bubble.textContent = text;
+  bubble.innerHTML = renderMarkdown(text);
 
   div.appendChild(avatar);
   div.appendChild(bubble);
@@ -346,9 +346,29 @@ function appendChatMessage(role, text, streaming = false) {
   return div;
 }
 
+function renderMarkdown(text) {
+  if (!text) return "";
+  // Escapar HTML para evitar XSS
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // Negrita **texto**
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // Cursiva *texto* (solo si no es negrita)
+  html = html.replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, "$1<em>$2</em>");
+  // Código inline `texto`
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // Listas con guión al inicio de línea
+  html = html.replace(/(^|\n)- (.+)/g, "$1• $2");
+  // Saltos de línea
+  html = html.replace(/\n/g, "<br>");
+  return html;
+}
+
 function updateStreamBubble(div, text) {
   const bubble = div.querySelector(".message-bubble");
-  if (bubble) bubble.textContent = text;
+  if (bubble) bubble.innerHTML = renderMarkdown(text);
   const container = document.getElementById("chatMessages");
   container.scrollTop = container.scrollHeight;
 }
