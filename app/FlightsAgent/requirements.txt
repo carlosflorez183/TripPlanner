@@ -1,0 +1,2 @@
+strands-agents[a2a]
+mcp>=2.0.0

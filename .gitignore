@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# AgentCore cache / CLI internals
+agentcore/.cache/
+agentcore/.cli/logs/
+agentcore/cdk/cdk.out/
+agentcore/cdk/node_modules/
+agentcore/cdk/dist/
+
+# Secrets
+.env
+.env.local
+*.pem
+*.key
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temp
+*.tmp
+*.log

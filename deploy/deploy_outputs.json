@@ -1,0 +1,19 @@
+{
+  "cognito_pool_id": "us-east-1_b1vipfKMR",
+  "cognito_client_id": "4mut3b36os8ardr8ejolh7l3kg",
+  "functions": {
+    "create_trip": "TripPlanner-CreateTrip-prod",
+    "get_trips": "TripPlanner-GetTrips-prod",
+    "update_trip": "TripPlanner-UpdateTrip-prod",
+    "delete_trip": "TripPlanner-DeleteTrip-prod",
+    "create_itinerary": "TripPlanner-CreateItinerary-prod",
+    "update_itinerary": "TripPlanner-UpdateItinerary-prod",
+    "create_reservation": "TripPlanner-CreateReservation-prod",
+    "get_reservations": "TripPlanner-GetReservations-prod",
+    "update_reservation": "TripPlanner-UpdateReservation-prod"
+  },
+  "api_id": "x22euoqhp8",
+  "api_base_url": "https://x22euoqhp8.execute-api.us-east-1.amazonaws.com/prod",
+  "s3_bucket": "tripplanner-ai-frontend-762233733426",
+  "website_url": "http://tripplanner-ai-frontend-762233733426.s3-website-us-east-1.amazonaws.com"
+}

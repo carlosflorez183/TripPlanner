@@ -1,0 +1,33 @@
+{
+  "targets": {
+    "dev": {
+      "resources": {
+        "runtimes": {
+          "OrchestratorAgent": {
+            "runtimeId": "TripPlanner_OrchestratorAgent-wlgjt0E83A",
+            "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:762233733426:runtime/TripPlanner_OrchestratorAgent-wlgjt0E83A",
+            "roleArn": "arn:aws:iam::762233733426:role/AgentCore-TripPlanner-dev-ApplicationAgentOrchestra-Pj5XhZq2y16B"
+          },
+          "WeatherAgent": {
+            "runtimeId": "TripPlanner_WeatherAgent-J1hu6x3yKH",
+            "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:762233733426:runtime/TripPlanner_WeatherAgent-J1hu6x3yKH",
+            "roleArn": "arn:aws:iam::762233733426:role/AgentCore-TripPlanner-dev-ApplicationAgentWeatherAg-NvtNAFLtXJLq"
+          },
+          "FlightsAgent": {
+            "runtimeId": "TripPlanner_FlightsAgent-ruYeYb7q6H",
+            "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:762233733426:runtime/TripPlanner_FlightsAgent-ruYeYb7q6H",
+            "roleArn": "arn:aws:iam::762233733426:role/AgentCore-TripPlanner-dev-ApplicationAgentFlightsAg-JM68iMJ7NycL"
+          }
+        },
+        "memories": {
+          "TripPlannerMemory": {
+            "memoryId": "TripPlanner_TripPlannerMemory-epjSyTGz4P",
+            "memoryArn": "arn:aws:bedrock-agentcore:us-east-1:762233733426:memory/TripPlanner_TripPlannerMemory-epjSyTGz4P"
+          }
+        },
+        "stackName": "AgentCore-TripPlanner-dev",
+        "deployHash": "1d1d514435c524ce"
+      }
+    }
+  }
+}

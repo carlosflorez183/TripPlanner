@@ -1,0 +1,152 @@
+{
+  "$schema": "https://schema.agentcore.aws.dev/v1/agentcore.json",
+  "name": "TripPlanner",
+  "version": 1,
+  "managedBy": "CDK",
+  "tags": {
+    "agentcore:created-by": "agentcore-cli",
+    "agentcore:project-name": "TripPlanner"
+  },
+  "runtimes": [
+    {
+      "name": "FlightsAgent",
+      "build": "CodeZip",
+      "entrypoint": "main.py",
+      "codeLocation": "app/FlightsAgent/",
+      "runtimeVersion": "PYTHON_3_12",
+      "networkMode": "PUBLIC",
+      "protocol": "A2A",
+      "envVars": [
+        {
+          "name": "TRAVEL_MCP_URL",
+          "value": "https://flights--google.run.tools"
+        },
+        {
+          "name": "SMITHERY_API_KEY",
+          "value": "a88886ea-efa2-4a65-a457-0e5dbdbca968"
+        },
+        {
+          "name": "MCP_SERVER_URL",
+          "value": "https://l7nbinviu4.execute-api.us-east-1.amazonaws.com/prod/mcp"
+        },
+        {
+          "name": "MCP_TIMEOUT",
+          "value": "15"
+        }
+      ]
+    },
+    {
+      "name": "WeatherAgent",
+      "build": "CodeZip",
+      "entrypoint": "main.py",
+      "codeLocation": "app/WeatherAgent/",
+      "runtimeVersion": "PYTHON_3_12",
+      "networkMode": "PUBLIC",
+      "protocol": "A2A"
+    },
+    {
+      "name": "OrchestratorAgent",
+      "build": "CodeZip",
+      "entrypoint": "main.py",
+      "codeLocation": "app/OrchestratorAgent/",
+      "runtimeVersion": "PYTHON_3_12",
+      "networkMode": "PUBLIC",
+      "protocol": "HTTP",
+      "envVars": [
+        {
+          "name": "FLIGHTS_AGENT_ARN",
+          "value": "arn:aws:bedrock-agentcore:us-east-1:762233733426:runtime/TripPlanner_FlightsAgent-ruYeYb7q6H"
+        },
+        {
+          "name": "WEATHER_AGENT_ARN",
+          "value": "arn:aws:bedrock-agentcore:us-east-1:762233733426:runtime/TripPlanner_WeatherAgent-J1hu6x3yKH"
+        },
+        {
+          "name": "TRIP_MEMORY_ID",
+          "value": "TripPlanner_TripPlannerMemory-epjSyTGz4P"
+        },
+        {
+          "name": "SPECIALIST_TIMEOUT",
+          "value": "30"
+        },
+        {
+          "name": "API_BASE_URL",
+          "value": "https://x22euoqhp8.execute-api.us-east-1.amazonaws.com/prod"
+        },
+        {
+          "name": "BEDROCK_MODEL_ID",
+          "value": "us.amazon.nova-lite-v1:0"
+        }
+      ],
+      "authorizerType": "CUSTOM_JWT",
+      "authorizerConfiguration": {
+        "customJwtAuthorizer": {
+          "discoveryUrl": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_b1vipfKMR/.well-known/openid-configuration",
+          "allowedAudience": [
+            "4mut3b36os8ardr8ejolh7l3kg"
+          ]
+        }
+      },
+      "requestHeaderAllowlist": [
+        "Authorization"
+      ],
+      "additionalPolicies": [
+        "iam-policy.json"
+      ]
+    }
+  ],
+  "memories": [
+    {
+      "name": "TripPlannerMemory",
+      "eventExpiryDuration": 30,
+      "strategies": [
+        {
+          "type": "USER_PREFERENCE",
+          "name": "TravelerPreferences",
+          "description": "Preferencias de viaje del usuario (horarios, aerolineas, asientos).",
+          "namespaceTemplates": [
+            "/preferences/{actorId}/"
+          ]
+        },
+        {
+          "type": "SUMMARIZATION",
+          "name": "SessionSummarizer",
+          "description": "Resumen por sesion de planificacion de viaje.",
+          "namespaceTemplates": [
+            "/summaries/{actorId}/{sessionId}/"
+          ]
+        },
+        {
+          "type": "SEMANTIC",
+          "name": "TravelFacts",
+          "description": "Hechos relevantes del viaje recuperables por significado.",
+          "namespaceTemplates": [
+            "/facts/{actorId}/"
+          ]
+        },
+        {
+          "type": "EPISODIC",
+          "name": "TripEpisodes",
+          "description": "Episodios concretos de planificacion y reserva con reflexion.",
+          "namespaceTemplates": [
+            "/episodes/{actorId}/{sessionId}/"
+          ],
+          "reflectionNamespaceTemplates": [
+            "/episodes/{actorId}/"
+          ]
+        }
+      ]
+    }
+  ],
+  "knowledgeBases": [],
+  "credentials": [],
+  "evaluators": [],
+  "onlineEvalConfigs": [],
+  "agentCoreGateways": [],
+  "policyEngines": [],
+  "configBundles": [],
+  "abTests": [],
+  "harnesses": [],
+  "datasets": [],
+  "payments": []
+}
