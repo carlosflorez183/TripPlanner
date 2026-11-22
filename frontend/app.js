@@ -240,7 +240,7 @@ async function sendChatMessage() {
       text,
       (acumulado) => {
         let display = acumulado.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
-        updateStreamBubble(assistantBubble, display);
+        updateStreamBubble(assistantBubble, display);  // plain text during streaming
       },
       STATE.chatAbortController.signal
     );
@@ -248,11 +248,11 @@ async function sendChatMessage() {
     assistantBubble.classList.remove("streaming");
     const cleanText = fullText.replace(/<thinking>[\s\S]*?<\/thinking>\s*/gi, "").trim();
     if (cleanText) {
-      updateStreamBubble(assistantBubble, cleanText);
+      updateStreamBubble(assistantBubble, cleanText, true);  // markdown at end
       fullText = cleanText;
     } else if (fullText.trim()) {
       const msg = "El agente proceso tu solicitud. (No genero respuesta de texto adicional.)";
-      updateStreamBubble(assistantBubble, msg);
+      updateStreamBubble(assistantBubble, msg, true);
       fullText = msg;
     }
     setStatus("Respuesta completada");
@@ -316,9 +316,12 @@ function renderMarkdown(text) {
   return html;
 }
 
-function updateStreamBubble(div, text) {
+function updateStreamBubble(div, text, asHtml = false) {
   const bubble = div.querySelector(".message-bubble");
-  if (bubble) bubble.innerHTML = renderMarkdown(text);
+  if (bubble) {
+    if (asHtml) bubble.innerHTML = renderMarkdown(text);
+    else bubble.textContent = text;
+  }
   const container = document.getElementById("chatMessages");
   container.scrollTop = container.scrollHeight;
 }
