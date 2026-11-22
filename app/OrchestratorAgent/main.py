@@ -742,7 +742,9 @@ async def invoke(payload, context):
         s_low = s.lower()
         tag_low = tag.lower()
         maxk = min(len(s_low), len(tag_low) - 1)
-        for k in range(maxk, 0, -1):
+        # Require at least 2 chars to hold back, so a lone "<" is never
+        # delayed (avoids flicker when "<" is a normal character).
+        for k in range(maxk, 1, -1):
             if s_low.endswith(tag_low[:k]):
                 return k
         return 0
